@@ -71,7 +71,6 @@ Visit the app at: **http://127.0.0.1:5000**
 ---
 
 ## 📊 Example Dashboard
-*(Add your screenshot here)*
 
 ![Dashboard Screenshot](static/screenshot.png)
 
