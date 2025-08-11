@@ -1,0 +1,139 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Stock Price Viewer</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <style>
+    :root{--bg:#0b0d10;--card:#12161a;--fg:#eaeef2;--muted:#9aa4af;--accent:#6aa6ff}
+    *{box-sizing:border-box}
+    body{margin:24px;background:var(--bg);color:var(--fg);font:14px/1.4 system-ui,Segoe UI,Roboto,Arial}
+    h1{margin:0 0 12px;font-size:22px}
+    .row{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+    input,button{padding:8px 10px;border:1px solid #222;border-radius:8px;background:#0e1318;color:var(--fg)}
+    button{cursor:pointer;background:#151b22}
+    button:hover{filter:brightness(1.1)}
+    .card{background:var(--card);border:1px solid #1c232b;border-radius:14px;padding:14px}
+    .kpi{display:flex;align-items:center;gap:12px}
+    .kpi .val{font-size:22px;font-weight:700}
+    .muted{color:var(--muted)}
+    canvas{width:100%;height:320px!important}
+    .grid{display:grid;grid-template-columns:1fr;gap:12px}
+    @media (min-width:900px){.grid{grid-template-columns:360px 1fr}}
+  </style>
+</head>
+<body>
+  <h1>Stock Price Viewer</h1>
+  <div class="row">
+    <input id="sym" value="RELIANCE.NS" />
+    <button onclick="refreshAll()">Refresh</button>
+    <button onclick="toggleAuto()"><span id="autoTxt">Start</span> Auto-Refresh (30s)</button>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <div class="kpi">
+        <div>
+          <div class="muted">Symbol</div>
+          <div id="kpiSym" class="val">RELIANCE.NS</div>
+        </div>
+        <div>
+          <div class="muted">Last Price</div>
+          <div id="kpiPrice" class="val">—</div>
+        </div>
+        <div>
+          <div class="muted">Updated</div>
+          <div id="kpiTs" class="val" style="font-size:16px">—</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <canvas id="chart"></canvas>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:12px">
+    <div class="muted">API Debug</div>
+    <pre id="out" style="white-space:pre-wrap;margin:8px 0 0"></pre>
+  </div>
+
+<script>
+  let chart, timer=null;
+
+  function fmtTs(ts){
+    try{ return new Date(ts).toLocaleString(); }catch{ return ts; }
+  }
+
+  async function fetchJSON(url){
+    const r = await fetch(url);
+    if(!r.ok) throw new Error(`${r.status} ${r.statusText}`);
+    return r.json();
+  }
+
+  async function loadPrice(sym){
+    const data = await fetchJSON(`/price/${encodeURIComponent(sym)}`);
+    document.getElementById('kpiSym').textContent = data.symbol;
+    document.getElementById('kpiPrice').textContent = data.price?.toFixed ? data.price.toFixed(2) : data.price;
+    document.getElementById('kpiTs').textContent = fmtTs(data.timestamp);
+    return data;
+  }
+
+  async function loadHistory(sym, n=120){
+    const data = await fetchJSON(`/history/${encodeURIComponent(sym)}?n=${n}`);
+    return data.data || [];
+  }
+
+  function buildChart(){
+    const ctx = document.getElementById('chart');
+    chart = new Chart(ctx, {
+      type: 'line',
+      data: { labels: [], datasets: [{ label: 'Price', data: [], tension: 0.25 }]},
+      options: {
+        responsive: true,
+        interaction: { mode: 'index', intersect: false },
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { ticks: { color: '#9aa4af' }, grid: { color: '#1c232b' }},
+          y: { ticks: { color: '#9aa4af' }, grid: { color: '#1c232b' }}
+        }
+      }
+    });
+  }
+
+  async function refreshAll(){
+    const sym = document.getElementById('sym').value.trim();
+    try{
+      const [_, hist] = await Promise.all([loadPrice(sym), loadHistory(sym, 120)]);
+      const labels = hist.map(p => new Date(p.timestamp).toLocaleTimeString());
+      const values = hist.map(p => p.price);
+      chart.data.labels = labels;
+      chart.data.datasets[0].data = values;
+      chart.update();
+      document.getElementById('out').textContent = JSON.stringify({symbol: sym, points: hist.length}, null, 2);
+    }catch(err){
+      document.getElementById('out').textContent = String(err);
+    }
+  }
+
+  function toggleAuto(){
+    const t = document.getElementById('autoTxt');
+    if(timer){
+      clearInterval(timer); timer = null; t.textContent = 'Start';
+    }else{
+      refreshAll(); // kick once
+      timer = setInterval(refreshAll, 30000); // 30s
+      t.textContent = 'Stop';
+    }
+  }
+
+  // init
+  // init
+  buildChart();
+  toggleAuto();   // starts 30s auto-refresh on page load
+
+</script>
+</body>
+</html>
